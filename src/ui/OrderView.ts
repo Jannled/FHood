@@ -93,7 +93,7 @@ export class OrderView {
     const qrBtn = el("button", {
       class: "p-2 rounded-lg border border-neutral-700 text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all cursor-pointer",
       title: "Teilen",
-    }, " QRCode");
+    }, "Teilen");
     qrBtn.addEventListener("click", () => {
       const sheet = this.orderService.getCurrentSheet();
       const restaurant = this.restaurantService.getById(this.restaurantId);
@@ -685,7 +685,7 @@ export class OrderView {
   private buildSummary(sheet: { orderCount: number; total: number; totalPaid: number; totalTip: number }): HTMLElement {
     const bar = el("div", {
       class:
-        "bg-neutral-900/60 border border-neutral-800 rounded-2xl p-6 flex items-center justify-around gap-6 flex-wrap backdrop-blur-sm animate-in-delay-2",
+        "bg-neutral-900/60 border border-neutral-800 rounded-2xl p-6 flex items-center justify-evenly gap-6 flex-wrap backdrop-blur-sm animate-in-delay-2",
     });
 
     const countItem = this.summaryItem(String(sheet.orderCount), "Bestellungen", "text-white");
