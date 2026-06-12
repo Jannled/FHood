@@ -42,8 +42,15 @@ export class Restaurant {
     return { id: this.id, name: this.name, menuItems: items };
   }
 
-  addOrUpdateItem(menuNumber: number, name: string, price: number): void {
-    this.menuItems.set(menuNumber, new MenuItem(menuNumber, name, price));
+  addOrUpdateItem(menuNumber: number, name: string, variant: string, price: number): void {
+    let item = this.menuItems.get(menuNumber);
+    if (!item) {
+      const variants = new Map<string, number>();
+      item = new MenuItem(menuNumber, name, variants);
+      this.menuItems.set(menuNumber, item);
+    }
+    item.name = name;
+    item.variants.set(variant, price);
   }
 
   getItem(menuNumber: number): MenuItem | undefined {

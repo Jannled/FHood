@@ -274,6 +274,22 @@ export class OrderView {
     itemGroup.appendChild(itemInput);
     itemGroup.appendChild(autocompleteList);
 
+    const variantGroup = el("div", { class: "w-32 relative" });
+    const variantLabel = el("label", { class: "block text-[10px] text-neutral-500 uppercase tracking-widest mb-1.5" }, "Variante");
+    const variantInput = el("input", {
+      type: "text",
+      placeholder: "Größe, etc.",
+      autocomplete: "off",
+      class:
+        "w-full px-3 py-2.5 text-sm bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none transition-all",
+      id: "order-variant",
+    });
+    if (existingOrder) (variantInput as HTMLInputElement).value = existingOrder.variant;
+    const variantAutocompleteList = el("div", { class: "autocomplete-dropdown", id: "order-variant-autocomplete" });
+    variantGroup.appendChild(variantLabel);
+    variantGroup.appendChild(variantInput);
+    variantGroup.appendChild(variantAutocompleteList);
+
     let autocompleteIndex = -1;
 
     const updateAutocomplete = () => {
@@ -292,15 +308,17 @@ export class OrderView {
         const entry = el("div", { class: "autocomplete-item" });
         const nrSpan = el("span", { class: "item-nr" }, String(match.menuNumber));
         const nameSpan = el("span", { class: "item-name" }, match.name);
-        const priceSpan = el("span", { class: "item-price" }, formatEuro(match.price));
+        const priceSpan = el("span", { class: "item-price" }, formatEuro([...match.variants.values()][0] || 0));
         entry.appendChild(nrSpan);
         entry.appendChild(nameSpan);
         entry.appendChild(priceSpan);
         entry.addEventListener("mousedown", (e) => {
           e.preventDefault();
+          const variant = match.variants.entries().next().value;
           (nrInput as HTMLInputElement).value = String(match.menuNumber);
           (itemInput as HTMLInputElement).value = match.name;
-          (priceInput as HTMLInputElement).value = centsToInputValue(match.price);
+          (variantInput as HTMLInputElement).value = variant?.[0] ?? "";
+          (priceInput as HTMLInputElement).value = centsToInputValue(variant?.[1] ?? 0);
           clearChildren(autocompleteList);
           autocompleteIndex = -1;
           (paidInput as HTMLInputElement).focus();
@@ -308,6 +326,29 @@ export class OrderView {
         autocompleteList.appendChild(entry);
       }
     };
+
+    const updateVariantAutocomplete = (nr: number) => {
+      clearChildren(variantAutocompleteList);
+      const restaurant = this.restaurantService.getById(this.restaurantId);
+      if (!restaurant) return;
+      const item = restaurant.getItem(nr);
+      if (!item) return;
+      for (const [name, price] of item.variants) {
+        const entry = el("div", { class: "autocomplete-item" });
+        const nameSpan = el("span", { class: "item-name" }, name);
+        const priceSpan = el("span", { class: "item-price" }, formatEuro(price));
+        entry.appendChild(nameSpan);
+        entry.appendChild(priceSpan);
+        entry.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          (variantInput as HTMLInputElement).value = name;
+          (priceInput as HTMLInputElement).value = centsToInputValue(price);
+          clearChildren(variantAutocompleteList);
+        });
+        variantAutocompleteList.appendChild(entry);
+      }
+    };
+
 
     itemInput.addEventListener("input", updateAutocomplete);
     itemInput.addEventListener("focus", updateAutocomplete);
@@ -321,7 +362,7 @@ export class OrderView {
       const items = autocompleteList.querySelectorAll(".autocomplete-item");
       if (items.length === 0) {
         if (e.key === "Enter") {
-          (priceInput as HTMLInputElement).focus();
+          (variantInput as HTMLInputElement).focus();
           e.preventDefault();
         }
         return;
@@ -339,7 +380,7 @@ export class OrderView {
         if (autocompleteIndex >= 0 && autocompleteIndex < items.length) {
           items[autocompleteIndex].dispatchEvent(new MouseEvent("mousedown"));
         } else {
-          (priceInput as HTMLInputElement).focus();
+          (variantInput as HTMLInputElement).focus();
         }
       } else if (e.key === "Escape") {
         clearChildren(autocompleteList);
@@ -386,6 +427,7 @@ export class OrderView {
       const personName = (nameInput as HTMLInputElement).value.trim();
       const menuNumber = parseInt((nrInput as HTMLInputElement).value, 10);
       const itemName = (itemInput as HTMLInputElement).value.trim();
+      const variant = (variantInput as HTMLInputElement).value.trim();
       const price = euroToCents((priceInput as HTMLInputElement).value);
       const paid = euroToCents((paidInput as HTMLInputElement).value);
       const comment = (commentInput as HTMLInputElement).value.trim();
@@ -395,6 +437,7 @@ export class OrderView {
         personName,
         menuNumber || 0,
         itemName,
+        variant,
         price,
         paid,
         new Date().toISOString(),
@@ -409,6 +452,7 @@ export class OrderView {
     row.appendChild(nameGroup);
     row.appendChild(nrGroup);
     row.appendChild(itemGroup);
+    row.appendChild(variantGroup);
     row.appendChild(priceGroup);
     row.appendChild(paidGroup);
     row.appendChild(submitBtn);
@@ -436,11 +480,24 @@ export class OrderView {
       if (!nr) return;
       const item = this.restaurantService.lookupMenuItem(this.restaurantId, nr);
       if (item) {
+        const variant = item.variants.entries().next().value;
         (itemInput as HTMLInputElement).value = item.name;
-        (priceInput as HTMLInputElement).value = centsToInputValue(item.price);
+        (variantInput as HTMLInputElement).value = variant?.[0] ?? "";
+        (priceInput as HTMLInputElement).value = centsToInputValue(variant?.[1] ?? 0);
         clearChildren(autocompleteList);
         autocompleteIndex = -1;
+        updateVariantAutocomplete(nr);
       }
+    });
+
+    variantInput.addEventListener("focus", () => {
+      const nr = parseInt((nrInput as HTMLInputElement).value, 10);
+      if (nr) updateVariantAutocomplete(nr);
+    });
+    variantInput.addEventListener("blur", () => {
+      setTimeout(() => {
+        clearChildren(variantAutocompleteList);
+      }, 150);
     });
 
     priceInput.addEventListener("blur", () => {
@@ -475,6 +532,13 @@ export class OrderView {
     priceInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         (paidInput as HTMLInputElement).focus();
+        e.preventDefault();
+      }
+    });
+
+    variantInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        (priceInput as HTMLInputElement).focus();
         e.preventDefault();
       }
     });
@@ -526,9 +590,9 @@ export class OrderView {
     });
 
     const sortNameBtn = el("span", { class: "w-28 shrink-0" }, "Name");
-
-    const hItem = el("span", { class: "flex-1 min-w-0" }, "Gericht");
-    const hComment = el("span", { class: "w-36 shrink-0" }, "Kommentar");
+    const hItem = el("span", { class: "w-28 min-w-0" }, "Gericht");
+    const hVariant = el("span", { class: "w-24 shrink-0" }, "Variante");
+    const hComment = el("span", { class: "flex-1 shrink-0" }, "Kommentar");
     const hPrice = el("span", { class: "w-24 text-right" }, "Preis");
     const hPaid = el("span", { class: "w-24 text-right" }, "Gegeben");
     const hTip = el("span", { class: "w-20 text-right" }, "Trinkgeld");
@@ -536,11 +600,13 @@ export class OrderView {
     headerBar.appendChild(sortNrBtn);
     headerBar.appendChild(sortNameBtn);
     headerBar.appendChild(hItem);
+    headerBar.appendChild(hVariant);
     headerBar.appendChild(hComment);
     headerBar.appendChild(hPrice);
     headerBar.appendChild(hPaid);
     headerBar.appendChild(hTip);
     headerBar.appendChild(hActions);
+
 
     const table = el("div", { class: "divide-y divide-neutral-800/50" });
 
@@ -558,9 +624,10 @@ export class OrderView {
         : el("span", { class: "w-9 h-9 rounded-lg bg-neutral-800 text-neutral-600 text-xs flex items-center justify-center shrink-0 border border-neutral-700/50" }, "—");
 
       const nameCol = el("span", { class: "w-28 text-sm text-white font-medium truncate shrink-0" }, order.personName);
-      const itemCol = el("span", { class: "flex-1 min-w-0 text-sm text-neutral-300 truncate" }, order.itemName);
+      const itemCol = el("span", { class: "w-28 min-w-0 text-sm text-neutral-300 truncate" }, order.itemName);
+      const variantCol = el("span", { class: "w-24 text-sm text-neutral-400 truncate shrink-0" }, order.variant);
       const commentCol = el("span", {
-        class: `w-36 shrink-0 text-sm truncate ${order.comment ? "text-neutral-400" : "text-neutral-700"}`,
+        class: `flex-1 shrink-0 text-sm truncate ${order.comment ? "text-neutral-400" : "text-neutral-700"}`,
         title: order.comment || "",
       }, order.comment || "—");
       const priceCol = el("span", { class: "w-24 text-sm text-neutral-400 font-mono tabular-nums text-right" }, formatEuro(order.price));
@@ -601,6 +668,7 @@ export class OrderView {
       row.appendChild(nrBadge);
       row.appendChild(nameCol);
       row.appendChild(itemCol);
+      row.appendChild(variantCol);
       row.appendChild(commentCol);
       row.appendChild(priceCol);
       row.appendChild(paidCol);

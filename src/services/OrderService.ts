@@ -35,10 +35,7 @@ export class OrderService {
     const sheet = this.sheets.get(this.current_sheet_id ?? "");
     if (!sheet) return;
     sheet.upsertOrder(order);
-    const existing = this.restaurantService.lookupMenuItem(sheet.restaurantId, order.menuNumber);
-    if (!existing || existing.name !== order.itemName || existing.price !== order.price) {
-      this.restaurantService.addMenuItem(sheet.restaurantId, order.menuNumber, order.itemName, order.price);
-    }
+    this.restaurantService.addOrUpdateMenuItem(sheet.restaurantId, order.menuNumber, order.itemName, order.variant, order.price);
     this.persist();
   }
 

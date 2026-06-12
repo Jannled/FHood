@@ -55,10 +55,10 @@ export class RestaurantService {
     return deleted;
   }
 
-  addMenuItem(restaurantId: string, menuNumber: number, name: string, price: number): MenuItem | null {
+  addOrUpdateMenuItem(restaurantId: string, menuNumber: number, name: string, variant: string, price: number): MenuItem | null {
     const r = this.restaurants.get(restaurantId);
     if (!r) return null;
-    r.addOrUpdateItem(menuNumber, name, price);
+    r.addOrUpdateItem(menuNumber, name, variant, price);
     this.persist();
     return r.getItem(menuNumber) ?? null;
   }
