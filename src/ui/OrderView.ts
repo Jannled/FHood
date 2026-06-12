@@ -1,5 +1,5 @@
 import { RestaurantService } from "../services/RestaurantService";
-import { OrderService, getCurrentWeekKey, formatWeekKey } from "../services/OrderService";
+import { OrderService, formatOrderSheetDate } from "../services/OrderService";
 import { Order } from "../models/Order";
 import { OrderSheet, SortMode } from "../models/OrderSheet";
 import { el, clearChildren, formatEuro, centsToInputValue, euroToCents, ChangeCallback } from "./utils";
@@ -34,14 +34,41 @@ export class OrderView {
     clearChildren(this.container);
 
     const restaurant = this.restaurantService.getById(this.restaurantId);
-    const sheet = this.orderService.getCurrentSheet(this.restaurantId);
+    const sheet = this.orderService.getCurrentSheet();
 
     const headerRow = el("div", { class: "flex items-baseline justify-between mb-10 animate-in" });
-    const weekLabel = el("div", {});
-    const weekTitle = el("p", { class: "text-[11px] text-neutral-500 uppercase tracking-[0.25em] mb-1.5 font-display" }, "Tageskost · Bestellungen");
-    const weekDate = el("p", { class: "text-sm text-neutral-400 font-mono tabular-nums" }, formatWeekKey(getCurrentWeekKey()));
+    const weekLabel = el("div");
+    const weekTitle = el("div", { class: "text-[11px] text-neutral-500 uppercase tracking-[0.25em] mb-1.5 font-display" }, "Tageskost · Bestellungen");
+    
+    const dateContainer = el("div", { class: "flex items-center gap-2 text-sm text-neutral-400 font-mono tabular-nums" });
+    
+    const prevBtn = el("button", {
+      class: "hover:text-white transition-colors cursor-pointer p-1 rounded hover:bg-neutral-800",
+      title: "Vorherige Bestellung",
+    }, "←");
+    prevBtn.addEventListener("click", () => {
+      const prev = this.orderService.previousOrder();
+      this.render();
+    });
+
+    const weekDate = el("p", { class: "text-sm text-neutral-400 font-mono tabular-nums" }, formatOrderSheetDate(sheet?.date));
+    
+    const nextBtn = el("button", {
+      class: "hover:text-white transition-colors cursor-pointer p-1 rounded hover:bg-neutral-800",
+      title: "Nächste Bestellung",
+    }, "→");
+    nextBtn.addEventListener("click", () => {
+      const next = this.orderService.nextOrder();
+      this.render();
+    });
+
+    dateContainer.appendChild(prevBtn);
+    dateContainer.appendChild(weekDate);
+    dateContainer.appendChild(nextBtn);
+
     weekLabel.appendChild(weekTitle);
-    weekLabel.appendChild(weekDate);
+    weekLabel.appendChild(dateContainer);
+
 
     const headerActions = el("div", { class: "flex items-center gap-3" });
     const menuBtn = el("button", {
@@ -53,11 +80,11 @@ export class OrderView {
     const resetBtn = el("button", {
       class:
         "text-sm text-neutral-500 hover:text-red-400 transition-all cursor-pointer border border-neutral-700 px-3.5 py-2 rounded-lg hover:border-red-400/30 font-medium",
-      title: "Bestellungen für diese Woche zurücksetzen",
-    }, "Neue Woche");
+      title: "Neue Bestellung anlegen",
+    }, "Neue Bestellung");
     resetBtn.addEventListener("click", () => {
-      if (confirm("Bestellungen für diese Woche zurücksetzen?")) {
-        this.orderService.resetCurrentWeek(this.restaurantId);
+      if (confirm("Neue Bestellung anlegen?")) {
+        this.orderService.createNewOrderSheet(this.restaurantId);
         this.editingPerson = null;
         this.render();
       }
@@ -74,6 +101,12 @@ export class OrderView {
       this.container.appendChild(msg);
       return this.container;
     }
+
+    if (!sheet) {
+      const msg = el("p", { class: "text-neutral-500 italic" }, "Erstelle eine neue Bestellung oben …");
+      this.container.appendChild(msg);
+      return this.container;
+    } 
 
     const formCard = this.buildForm();
     this.container.appendChild(formCard);
@@ -98,7 +131,7 @@ export class OrderView {
 
     const isEditing = this.editingPerson !== null;
     const existingOrder = isEditing
-      ? this.orderService.getCurrentSheet(this.restaurantId).getOrder(this.editingPerson!)
+      ? this.orderService.getCurrentSheet()?.getOrder(this.editingPerson!)
       : null;
 
     const labelRow = el("div", { class: "flex items-center justify-between mb-5" });
@@ -301,7 +334,7 @@ export class OrderView {
         new Date().toISOString(),
         comment,
       );
-      this.orderService.addOrder(this.restaurantId, order);
+      this.orderService.addOrder(order);
       this.editingPerson = null;
       this.render();
       if (this.onChange) this.onChange();
@@ -491,7 +524,7 @@ export class OrderView {
         title: "Entfernen",
       }, "✕");
       delBtn.addEventListener("click", () => {
-        this.orderService.removeOrder(this.restaurantId, order.personName);
+        this.orderService.removeOrder(order.personName);
         this.render();
         if (this.onChange) this.onChange();
       });
@@ -552,7 +585,8 @@ export class OrderView {
   }
 
   renderTable(): void {
-    const sheet = this.orderService.getCurrentSheet(this.restaurantId);
+    const sheet = this.orderService.getCurrentSheet();
+    if (!sheet) return;
     const sortedOrders = sheet.getSortedOrders(this.sortMode);
     const existingTable = this.container.querySelector(":scope > div:nth-child(3)");
     if (existingTable) {

@@ -4,12 +4,15 @@ export type SortMode = "default" | "number";
 
 export class OrderSheet {
   public orders: Map<string, Order>;
+  public id: string;
 
   constructor(
-    public weekKey: string,
+    public date: Date,
     public restaurantId: string,
     orders?: Map<string, Order>,
+    id?: string
   ) {
+    this.id = id ?? crypto.randomUUID();
     this.orders = orders ?? new Map();
   }
 
@@ -33,7 +36,7 @@ export class OrderSheet {
         }
       }
     }
-    return new OrderSheet(String(d.weekKey ?? ""), String(d.restaurantId ?? ""), orders);
+    return new OrderSheet(new Date(String(d.date ?? "")), String(d.restaurantId ?? ""), orders, String(d.id));
   }
 
   toJSON(): object {
@@ -41,7 +44,7 @@ export class OrderSheet {
     for (const [name, order] of this.orders) {
       orders[name] = order.toJSON();
     }
-    return { weekKey: this.weekKey, restaurantId: this.restaurantId, orders };
+    return { id: this.id, date: this.date.toISOString(), restaurantId: this.restaurantId, orders };
   }
 
   upsertOrder(order: Order): void {
