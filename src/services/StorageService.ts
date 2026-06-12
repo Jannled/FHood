@@ -3,6 +3,7 @@ import { OrderSheet } from "../models/OrderSheet";
 
 const MENU_KEY = "fhood_menu";
 const ORDERS_KEY = "fhood_orders";
+const CURRENT_ORDER_ID_KEY = "fhood_current_order_id";
 
 function parseOrNull(raw: string | null): unknown | null {
   if (!raw) return null;
@@ -30,7 +31,7 @@ export class StorageService {
     const map = new Map<string, OrderSheet>();
     for (const s of raw as unknown[]) {
       const sheet = OrderSheet.fromJSON(s);
-      const key = `${sheet.restaurantId}:${sheet.weekKey}`;
+      const key = sheet.id;
       map.set(key, sheet);
     }
     return map;
@@ -38,5 +39,17 @@ export class StorageService {
 
   saveOrderSheets(sheets: Map<string, OrderSheet>): void {
     localStorage.setItem(ORDERS_KEY, JSON.stringify([...sheets.values()].map((s) => s.toJSON())));
+  }
+
+  loadCurrentOrderId(): string | null {
+    return localStorage.getItem(CURRENT_ORDER_ID_KEY);
+  }
+
+  saveCurrentOrderId(id: string | null): void {
+    if (id) {
+      localStorage.setItem(CURRENT_ORDER_ID_KEY, id);
+    } else {
+      localStorage.removeItem(CURRENT_ORDER_ID_KEY);
+    }
   }
 }
