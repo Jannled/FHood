@@ -90,11 +90,77 @@ export class OrderView {
       }
     });
 
+    const qrBtn = el("button", {
+      class: "p-2 rounded-lg border border-neutral-700 text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all cursor-pointer",
+      title: "Teilen",
+    }, " QRCode");
+    qrBtn.addEventListener("click", () => {
+      const sheet = this.orderService.getCurrentSheet();
+      const restaurant = this.restaurantService.getById(this.restaurantId);
+      if (!sheet || !restaurant) return;
+
+      const importData = JSON.stringify({
+        restaurant: restaurant.toJSON(),
+        order: sheet.toJSON(),
+      });
+      const url = `${window.location.origin}${window.location.pathname}?import=${encodeURIComponent(importData)}`;
+      
+      const popup = el("div", { class: "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" });
+      const card = el("div", { class: "bg-neutral-900 border border-neutral-800 p-8 rounded-2xl w-fit text-center shadow-2xl" });
+      
+      const title = el("p", { class: "text-white font-medium mb-4 font-display" }, "Bestellung teilen");
+      const qrContainer = el("div", { class: "w-fit h-fit mx-auto bg-white p-2 rounded-lg mb-4 flex items-center justify-center" });
+      const qrCanvas = el("canvas", { class: "size-fit" });
+      qrContainer.appendChild(qrCanvas);
+
+      const urlContainer = el("div", { class: "mb-6" });
+      const urlInput = el("input", {
+        type: "text",
+        readOnly: true,
+        value: url,
+        class: "w-full px-3 py-2 text-xs bg-neutral-800 border border-neutral-700 rounded-lg text-neutral-400 text-center font-mono focus:outline-none cursor-pointer hover:bg-neutral-700 transition-colors",
+        title: "Klicken zum Kopieren"
+      });
+      urlInput.addEventListener("click", () => {
+        navigator.clipboard.writeText(url);
+        const originalVal = urlInput.value;
+        urlInput.value = "Kopiert!";
+        setTimeout(() => (urlInput.value = originalVal), 2000);
+      });
+      urlContainer.appendChild(urlInput);
+      
+      const closeBtn = el("button", { 
+        class: "w-full py-2 text-sm text-neutral-400 hover:text-white transition-colors cursor-pointer font-medium" 
+      }, "Schließen");
+      
+      closeBtn.addEventListener("click", () => {
+        document.body.removeChild(popup);
+      });
+
+      card.appendChild(title);
+      card.appendChild(qrContainer);
+      card.appendChild(urlContainer);
+      card.appendChild(closeBtn);
+      popup.appendChild(card);
+      document.body.appendChild(popup);
+
+      import("qrcode").then(QRCode => {
+        QRCode.toCanvas(qrCanvas, url, { width: 400, margin: 2 }, (err) => {
+          if (err) console.error("QR Code generation failed", err);
+        });
+      }).catch(e => {
+        console.error("Failed to load qrcode library", e);
+        qrContainer.innerHTML = '<p class="text-black text-xs">QR Code konnte nicht generiert werden</p>';
+      });
+    });
+
     headerActions.appendChild(menuBtn);
     headerActions.appendChild(resetBtn);
+    headerActions.appendChild(qrBtn);
     headerRow.appendChild(weekLabel);
     headerRow.appendChild(headerActions);
     this.container.appendChild(headerRow);
+
 
     if (!restaurant) {
       const msg = el("p", { class: "text-neutral-500 italic" }, "Wähle ein Restaurant oben …");

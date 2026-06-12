@@ -99,4 +99,10 @@ export class OrderService {
     this.current_sheet_id = sheetsList[currentIndex - 1].id;
     this.persist();
   }
+
+  import(sheet: OrderSheet): void {
+    this.sheets.set(sheet.id, sheet);
+    this.current_sheet_id = sheet.id;
+    this.persist();
+  }
 }

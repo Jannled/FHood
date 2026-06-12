@@ -74,4 +74,16 @@ export class RestaurantService {
   lookupMenuItem(restaurantId: string, menuNumber: number): MenuItem | undefined {
     return this.restaurants.get(restaurantId)?.getItem(menuNumber);
   }
+
+  import(restaurant: Restaurant): void {
+    const existing = this.restaurants.get(restaurant.id);
+    if (!existing) {
+      this.restaurants.set(restaurant.id, restaurant);
+    } else {
+      restaurant.menuItems.forEach((item, num) => {
+        existing.menuItems.set(num, item);
+      });
+    }
+    this.persist();
+  }
 }
