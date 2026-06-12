@@ -25,7 +25,7 @@ export class MenuCardPanel {
 
     const panel = el("aside", {
       class:
-        "absolute right-0 top-0 bottom-0 w-full max-w-lg bg-neutral-900 border-l border-neutral-800 transition-all duration-300 ease-out flex flex-col",
+        "absolute right-0 top-0 bottom-0 bg-neutral-900 border-l border-neutral-800 transition-all duration-300 ease-out flex flex-col",
       id: "menu-panel",
     });
 
@@ -82,6 +82,14 @@ export class MenuCardPanel {
         "flex-1 px-3 py-2.5 text-sm bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none transition-all",
       id: "menu-add-name",
     });
+    const variantInput = el("input", {
+      type: "text",
+      placeholder: "Variante",
+      autocomplete: "off",
+      class:
+        "w-24 px-3 py-2.5 text-sm bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none transition-all",
+      id: "menu-add-variant",
+    });
     const priceInput = el("input", {
       type: "text",
       inputmode: "decimal",
@@ -99,11 +107,13 @@ export class MenuCardPanel {
     addBtn.addEventListener("click", () => {
       const nr = parseInt((nrInput as HTMLInputElement).value, 10);
       const name = (nameInput as HTMLInputElement).value.trim();
+      const variant = (variantInput as HTMLInputElement).value.trim() || "default";
       const price = euroToCents((priceInput as HTMLInputElement).value);
       if (!nr || !name || price <= 0) return;
-      this.restaurantService.addMenuItem(this.restaurantId, nr, name, price);
+      this.restaurantService.addOrUpdateMenuItem(this.restaurantId, nr, name, variant, price);
       (nrInput as HTMLInputElement).value = "";
       (nameInput as HTMLInputElement).value = "";
+      (variantInput as HTMLInputElement).value = "";
       (priceInput as HTMLInputElement).value = "";
       this.renderList();
       if (this.onChange) this.onChange();
@@ -118,6 +128,7 @@ export class MenuCardPanel {
 
     row.appendChild(nrInput);
     row.appendChild(nameInput);
+    row.appendChild(variantInput);
     row.appendChild(priceInput);
     row.appendChild(addBtn);
     form.appendChild(row);
@@ -155,7 +166,11 @@ export class MenuCardPanel {
           "inline-flex items-center justify-center w-9 h-9 rounded-lg bg-neutral-800 text-amber-400 text-xs font-mono font-bold shrink-0 border border-neutral-700/50",
       }, String(item.menuNumber));
       const nameSpan = el("span", { class: "flex-1 text-sm text-neutral-200" }, item.name);
-      const priceSpan = el("span", { class: "text-sm text-neutral-400 font-mono tabular-nums" }, formatEuro(item.price));
+      const variantsContainer = el("div", { class: "text-right" });
+      for (const [name, price] of item.variants) {
+        const variantSpan = el("span", { class: "block text-xs text-neutral-400 font-mono tabular-nums" }, `${name}: ${formatEuro(price)}`);
+        variantsContainer.appendChild(variantSpan);
+      }
       const delBtn = el("button", {
         class:
           "text-neutral-600 hover:text-red-400 transition-colors text-sm opacity-0 group-hover:opacity-100 cursor-pointer p-1.5 rounded hover:bg-neutral-800",
@@ -169,7 +184,7 @@ export class MenuCardPanel {
 
       row.appendChild(nrBadge);
       row.appendChild(nameSpan);
-      row.appendChild(priceSpan);
+      row.appendChild(variantsContainer);
       row.appendChild(delBtn);
       table.appendChild(row);
     }

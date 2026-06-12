@@ -3,11 +3,7 @@
   "share": "disabled",
   "permission": {
     "bash": {
-      "*": "allow",
-      "rm *": "ask",
-      "git push *": "ask",
-      "grep *": "allow",
-      "git status": "allow",
+      "*": "ask"
     },
     "edit": {
       "opencode.json": "ask"

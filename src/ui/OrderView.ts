@@ -1,5 +1,5 @@
 import { RestaurantService } from "../services/RestaurantService";
-import { OrderService, getCurrentWeekKey, formatWeekKey } from "../services/OrderService";
+import { OrderService, formatOrderSheetDate } from "../services/OrderService";
 import { Order } from "../models/Order";
 import { OrderSheet, SortMode } from "../models/OrderSheet";
 import { el, clearChildren, formatEuro, centsToInputValue, euroToCents, ChangeCallback } from "./utils";
@@ -34,14 +34,41 @@ export class OrderView {
     clearChildren(this.container);
 
     const restaurant = this.restaurantService.getById(this.restaurantId);
-    const sheet = this.orderService.getCurrentSheet(this.restaurantId);
+    const sheet = this.orderService.getCurrentSheet();
 
     const headerRow = el("div", { class: "flex items-baseline justify-between mb-10 animate-in" });
-    const weekLabel = el("div", {});
-    const weekTitle = el("p", { class: "text-[11px] text-neutral-500 uppercase tracking-[0.25em] mb-1.5 font-display" }, "Tageskost · Bestellungen");
-    const weekDate = el("p", { class: "text-sm text-neutral-400 font-mono tabular-nums" }, formatWeekKey(getCurrentWeekKey()));
+    const weekLabel = el("div");
+    const weekTitle = el("div", { class: "text-[11px] text-neutral-500 uppercase tracking-[0.25em] mb-1.5 font-display" }, "Tageskost · Bestellungen");
+    
+    const dateContainer = el("div", { class: "flex items-center gap-2 text-sm text-neutral-400 font-mono tabular-nums" });
+    
+    const prevBtn = el("button", {
+      class: "hover:text-white transition-colors cursor-pointer p-1 rounded hover:bg-neutral-800",
+      title: "Vorherige Bestellung",
+    }, "←");
+    prevBtn.addEventListener("click", () => {
+      const prev = this.orderService.previousOrder();
+      this.render();
+    });
+
+    const weekDate = el("p", { class: "text-sm text-neutral-400 font-mono tabular-nums" }, formatOrderSheetDate(sheet?.date));
+    
+    const nextBtn = el("button", {
+      class: "hover:text-white transition-colors cursor-pointer p-1 rounded hover:bg-neutral-800",
+      title: "Nächste Bestellung",
+    }, "→");
+    nextBtn.addEventListener("click", () => {
+      const next = this.orderService.nextOrder();
+      this.render();
+    });
+
+    dateContainer.appendChild(prevBtn);
+    dateContainer.appendChild(weekDate);
+    dateContainer.appendChild(nextBtn);
+
     weekLabel.appendChild(weekTitle);
-    weekLabel.appendChild(weekDate);
+    weekLabel.appendChild(dateContainer);
+
 
     const headerActions = el("div", { class: "flex items-center gap-3" });
     const menuBtn = el("button", {
@@ -53,27 +80,99 @@ export class OrderView {
     const resetBtn = el("button", {
       class:
         "text-sm text-neutral-500 hover:text-red-400 transition-all cursor-pointer border border-neutral-700 px-3.5 py-2 rounded-lg hover:border-red-400/30 font-medium",
-      title: "Bestellungen für diese Woche zurücksetzen",
-    }, "Neue Woche");
+      title: "Neue Bestellung anlegen",
+    }, "Neue Bestellung");
     resetBtn.addEventListener("click", () => {
-      if (confirm("Bestellungen für diese Woche zurücksetzen?")) {
-        this.orderService.resetCurrentWeek(this.restaurantId);
+      if (confirm("Neue Bestellung anlegen?")) {
+        this.orderService.createNewOrderSheet(this.restaurantId);
         this.editingPerson = null;
         this.render();
       }
     });
 
+    const qrBtn = el("button", {
+      class: "p-2 rounded-lg border border-neutral-700 text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all cursor-pointer",
+      title: "Teilen",
+    }, "Teilen");
+    qrBtn.addEventListener("click", () => {
+      const sheet = this.orderService.getCurrentSheet();
+      const restaurant = this.restaurantService.getById(this.restaurantId);
+      if (!sheet || !restaurant) return;
+
+      const importData = JSON.stringify({
+        restaurant: restaurant.toJSON(),
+        order: sheet.toJSON(),
+      });
+      const url = `${window.location.origin}${window.location.pathname}?import=${encodeURIComponent(importData)}`;
+      
+      const popup = el("div", { class: "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" });
+      const card = el("div", { class: "bg-neutral-900 border border-neutral-800 p-8 rounded-2xl w-fit text-center shadow-2xl" });
+      
+      const title = el("p", { class: "text-white font-medium mb-4 font-display" }, "Bestellung teilen");
+      const qrContainer = el("div", { class: "w-fit h-fit mx-auto bg-white p-2 rounded-lg mb-4 flex items-center justify-center" });
+      const qrCanvas = el("canvas", { class: "size-fit" });
+      qrContainer.appendChild(qrCanvas);
+
+      const urlContainer = el("div", { class: "mb-6" });
+      const urlInput = el("input", {
+        type: "text",
+        readOnly: true,
+        value: url,
+        class: "w-full px-3 py-2 text-xs bg-neutral-800 border border-neutral-700 rounded-lg text-neutral-400 text-center font-mono focus:outline-none cursor-pointer hover:bg-neutral-700 transition-colors",
+        title: "Klicken zum Kopieren"
+      });
+      urlInput.addEventListener("click", () => {
+        navigator.clipboard.writeText(url);
+        const originalVal = urlInput.value;
+        urlInput.value = "Kopiert!";
+        setTimeout(() => (urlInput.value = originalVal), 2000);
+      });
+      urlContainer.appendChild(urlInput);
+      
+      const closeBtn = el("button", { 
+        class: "w-full py-2 text-sm text-neutral-400 hover:text-white transition-colors cursor-pointer font-medium" 
+      }, "Schließen");
+      
+      closeBtn.addEventListener("click", () => {
+        document.body.removeChild(popup);
+      });
+
+      card.appendChild(title);
+      card.appendChild(qrContainer);
+      card.appendChild(urlContainer);
+      card.appendChild(closeBtn);
+      popup.appendChild(card);
+      document.body.appendChild(popup);
+
+      import("qrcode").then(QRCode => {
+        QRCode.toCanvas(qrCanvas, url, { width: 400, margin: 2 }, (err) => {
+          if (err) console.error("QR Code generation failed", err);
+        });
+      }).catch(e => {
+        console.error("Failed to load qrcode library", e);
+        qrContainer.innerHTML = '<p class="text-black text-xs">QR Code konnte nicht generiert werden</p>';
+      });
+    });
+
     headerActions.appendChild(menuBtn);
     headerActions.appendChild(resetBtn);
+    headerActions.appendChild(qrBtn);
     headerRow.appendChild(weekLabel);
     headerRow.appendChild(headerActions);
     this.container.appendChild(headerRow);
+
 
     if (!restaurant) {
       const msg = el("p", { class: "text-neutral-500 italic" }, "Wähle ein Restaurant oben …");
       this.container.appendChild(msg);
       return this.container;
     }
+
+    if (!sheet) {
+      const msg = el("p", { class: "text-neutral-500 italic" }, "Erstelle eine neue Bestellung oben …");
+      this.container.appendChild(msg);
+      return this.container;
+    } 
 
     const formCard = this.buildForm();
     this.container.appendChild(formCard);
@@ -98,7 +197,7 @@ export class OrderView {
 
     const isEditing = this.editingPerson !== null;
     const existingOrder = isEditing
-      ? this.orderService.getCurrentSheet(this.restaurantId).getOrder(this.editingPerson!)
+      ? this.orderService.getCurrentSheet()?.getOrder(this.editingPerson!)
       : null;
 
     const labelRow = el("div", { class: "flex items-center justify-between mb-5" });
@@ -175,6 +274,22 @@ export class OrderView {
     itemGroup.appendChild(itemInput);
     itemGroup.appendChild(autocompleteList);
 
+    const variantGroup = el("div", { class: "w-32 relative" });
+    const variantLabel = el("label", { class: "block text-[10px] text-neutral-500 uppercase tracking-widest mb-1.5" }, "Variante");
+    const variantInput = el("input", {
+      type: "text",
+      placeholder: "Größe, etc.",
+      autocomplete: "off",
+      class:
+        "w-full px-3 py-2.5 text-sm bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:border-amber-500 focus:outline-none transition-all",
+      id: "order-variant",
+    });
+    if (existingOrder) (variantInput as HTMLInputElement).value = existingOrder.variant;
+    const variantAutocompleteList = el("div", { class: "autocomplete-dropdown", id: "order-variant-autocomplete" });
+    variantGroup.appendChild(variantLabel);
+    variantGroup.appendChild(variantInput);
+    variantGroup.appendChild(variantAutocompleteList);
+
     let autocompleteIndex = -1;
 
     const updateAutocomplete = () => {
@@ -193,15 +308,17 @@ export class OrderView {
         const entry = el("div", { class: "autocomplete-item" });
         const nrSpan = el("span", { class: "item-nr" }, String(match.menuNumber));
         const nameSpan = el("span", { class: "item-name" }, match.name);
-        const priceSpan = el("span", { class: "item-price" }, formatEuro(match.price));
+        const priceSpan = el("span", { class: "item-price" }, formatEuro([...match.variants.values()][0] || 0));
         entry.appendChild(nrSpan);
         entry.appendChild(nameSpan);
         entry.appendChild(priceSpan);
         entry.addEventListener("mousedown", (e) => {
           e.preventDefault();
+          const variant = match.variants.entries().next().value;
           (nrInput as HTMLInputElement).value = String(match.menuNumber);
           (itemInput as HTMLInputElement).value = match.name;
-          (priceInput as HTMLInputElement).value = centsToInputValue(match.price);
+          (variantInput as HTMLInputElement).value = variant?.[0] ?? "";
+          (priceInput as HTMLInputElement).value = centsToInputValue(variant?.[1] ?? 0);
           clearChildren(autocompleteList);
           autocompleteIndex = -1;
           (paidInput as HTMLInputElement).focus();
@@ -209,6 +326,29 @@ export class OrderView {
         autocompleteList.appendChild(entry);
       }
     };
+
+    const updateVariantAutocomplete = (nr: number) => {
+      clearChildren(variantAutocompleteList);
+      const restaurant = this.restaurantService.getById(this.restaurantId);
+      if (!restaurant) return;
+      const item = restaurant.getItem(nr);
+      if (!item) return;
+      for (const [name, price] of item.variants) {
+        const entry = el("div", { class: "autocomplete-item" });
+        const nameSpan = el("span", { class: "item-name" }, name);
+        const priceSpan = el("span", { class: "item-price" }, formatEuro(price));
+        entry.appendChild(nameSpan);
+        entry.appendChild(priceSpan);
+        entry.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          (variantInput as HTMLInputElement).value = name;
+          (priceInput as HTMLInputElement).value = centsToInputValue(price);
+          clearChildren(variantAutocompleteList);
+        });
+        variantAutocompleteList.appendChild(entry);
+      }
+    };
+
 
     itemInput.addEventListener("input", updateAutocomplete);
     itemInput.addEventListener("focus", updateAutocomplete);
@@ -222,7 +362,7 @@ export class OrderView {
       const items = autocompleteList.querySelectorAll(".autocomplete-item");
       if (items.length === 0) {
         if (e.key === "Enter") {
-          (priceInput as HTMLInputElement).focus();
+          (variantInput as HTMLInputElement).focus();
           e.preventDefault();
         }
         return;
@@ -240,7 +380,7 @@ export class OrderView {
         if (autocompleteIndex >= 0 && autocompleteIndex < items.length) {
           items[autocompleteIndex].dispatchEvent(new MouseEvent("mousedown"));
         } else {
-          (priceInput as HTMLInputElement).focus();
+          (variantInput as HTMLInputElement).focus();
         }
       } else if (e.key === "Escape") {
         clearChildren(autocompleteList);
@@ -287,6 +427,7 @@ export class OrderView {
       const personName = (nameInput as HTMLInputElement).value.trim();
       const menuNumber = parseInt((nrInput as HTMLInputElement).value, 10);
       const itemName = (itemInput as HTMLInputElement).value.trim();
+      const variant = (variantInput as HTMLInputElement).value.trim();
       const price = euroToCents((priceInput as HTMLInputElement).value);
       const paid = euroToCents((paidInput as HTMLInputElement).value);
       const comment = (commentInput as HTMLInputElement).value.trim();
@@ -296,12 +437,13 @@ export class OrderView {
         personName,
         menuNumber || 0,
         itemName,
+        variant,
         price,
         paid,
         new Date().toISOString(),
         comment,
       );
-      this.orderService.addOrder(this.restaurantId, order);
+      this.orderService.addOrder(order);
       this.editingPerson = null;
       this.render();
       if (this.onChange) this.onChange();
@@ -310,6 +452,7 @@ export class OrderView {
     row.appendChild(nameGroup);
     row.appendChild(nrGroup);
     row.appendChild(itemGroup);
+    row.appendChild(variantGroup);
     row.appendChild(priceGroup);
     row.appendChild(paidGroup);
     row.appendChild(submitBtn);
@@ -337,11 +480,24 @@ export class OrderView {
       if (!nr) return;
       const item = this.restaurantService.lookupMenuItem(this.restaurantId, nr);
       if (item) {
+        const variant = item.variants.entries().next().value;
         (itemInput as HTMLInputElement).value = item.name;
-        (priceInput as HTMLInputElement).value = centsToInputValue(item.price);
+        (variantInput as HTMLInputElement).value = variant?.[0] ?? "";
+        (priceInput as HTMLInputElement).value = centsToInputValue(variant?.[1] ?? 0);
         clearChildren(autocompleteList);
         autocompleteIndex = -1;
+        updateVariantAutocomplete(nr);
       }
+    });
+
+    variantInput.addEventListener("focus", () => {
+      const nr = parseInt((nrInput as HTMLInputElement).value, 10);
+      if (nr) updateVariantAutocomplete(nr);
+    });
+    variantInput.addEventListener("blur", () => {
+      setTimeout(() => {
+        clearChildren(variantAutocompleteList);
+      }, 150);
     });
 
     priceInput.addEventListener("blur", () => {
@@ -376,6 +532,13 @@ export class OrderView {
     priceInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         (paidInput as HTMLInputElement).focus();
+        e.preventDefault();
+      }
+    });
+
+    variantInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        (priceInput as HTMLInputElement).focus();
         e.preventDefault();
       }
     });
@@ -427,9 +590,9 @@ export class OrderView {
     });
 
     const sortNameBtn = el("span", { class: "w-28 shrink-0" }, "Name");
-
-    const hItem = el("span", { class: "flex-1 min-w-0" }, "Gericht");
-    const hComment = el("span", { class: "w-36 shrink-0" }, "Kommentar");
+    const hItem = el("span", { class: "w-28 min-w-0" }, "Gericht");
+    const hVariant = el("span", { class: "w-24 shrink-0" }, "Variante");
+    const hComment = el("span", { class: "flex-1 shrink-0" }, "Kommentar");
     const hPrice = el("span", { class: "w-24 text-right" }, "Preis");
     const hPaid = el("span", { class: "w-24 text-right" }, "Gegeben");
     const hTip = el("span", { class: "w-20 text-right" }, "Trinkgeld");
@@ -437,11 +600,13 @@ export class OrderView {
     headerBar.appendChild(sortNrBtn);
     headerBar.appendChild(sortNameBtn);
     headerBar.appendChild(hItem);
+    headerBar.appendChild(hVariant);
     headerBar.appendChild(hComment);
     headerBar.appendChild(hPrice);
     headerBar.appendChild(hPaid);
     headerBar.appendChild(hTip);
     headerBar.appendChild(hActions);
+
 
     const table = el("div", { class: "divide-y divide-neutral-800/50" });
 
@@ -459,9 +624,10 @@ export class OrderView {
         : el("span", { class: "w-9 h-9 rounded-lg bg-neutral-800 text-neutral-600 text-xs flex items-center justify-center shrink-0 border border-neutral-700/50" }, "—");
 
       const nameCol = el("span", { class: "w-28 text-sm text-white font-medium truncate shrink-0" }, order.personName);
-      const itemCol = el("span", { class: "flex-1 min-w-0 text-sm text-neutral-300 truncate" }, order.itemName);
+      const itemCol = el("span", { class: "w-28 min-w-0 text-sm text-neutral-300 truncate" }, order.itemName);
+      const variantCol = el("span", { class: "w-24 text-sm text-neutral-400 truncate shrink-0" }, order.variant);
       const commentCol = el("span", {
-        class: `w-36 shrink-0 text-sm truncate ${order.comment ? "text-neutral-400" : "text-neutral-700"}`,
+        class: `flex-1 shrink-0 text-sm truncate ${order.comment ? "text-neutral-400" : "text-neutral-700"}`,
         title: order.comment || "",
       }, order.comment || "—");
       const priceCol = el("span", { class: "w-24 text-sm text-neutral-400 font-mono tabular-nums text-right" }, formatEuro(order.price));
@@ -491,7 +657,7 @@ export class OrderView {
         title: "Entfernen",
       }, "✕");
       delBtn.addEventListener("click", () => {
-        this.orderService.removeOrder(this.restaurantId, order.personName);
+        this.orderService.removeOrder(order.personName);
         this.render();
         if (this.onChange) this.onChange();
       });
@@ -502,6 +668,7 @@ export class OrderView {
       row.appendChild(nrBadge);
       row.appendChild(nameCol);
       row.appendChild(itemCol);
+      row.appendChild(variantCol);
       row.appendChild(commentCol);
       row.appendChild(priceCol);
       row.appendChild(paidCol);
@@ -518,7 +685,7 @@ export class OrderView {
   private buildSummary(sheet: { orderCount: number; total: number; totalPaid: number; totalTip: number }): HTMLElement {
     const bar = el("div", {
       class:
-        "bg-neutral-900/60 border border-neutral-800 rounded-2xl p-6 flex items-center justify-around gap-6 flex-wrap backdrop-blur-sm animate-in-delay-2",
+        "bg-neutral-900/60 border border-neutral-800 rounded-2xl p-6 flex items-center justify-evenly gap-6 flex-wrap backdrop-blur-sm animate-in-delay-2",
     });
 
     const countItem = this.summaryItem(String(sheet.orderCount), "Bestellungen", "text-white");
@@ -552,7 +719,8 @@ export class OrderView {
   }
 
   renderTable(): void {
-    const sheet = this.orderService.getCurrentSheet(this.restaurantId);
+    const sheet = this.orderService.getCurrentSheet();
+    if (!sheet) return;
     const sortedOrders = sheet.getSortedOrders(this.sortMode);
     const existingTable = this.container.querySelector(":scope > div:nth-child(3)");
     if (existingTable) {
