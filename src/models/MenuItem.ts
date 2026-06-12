@@ -12,7 +12,7 @@ export class MenuItem {
     const variants = new Map<string, number>();
     const rawVariants = d.variants;
     if (rawVariants && typeof rawVariants === "object") {
-      for (const [key, value] of Object.entries(rawVariants)) {
+      for (const [key, value] of Object.entries(rawVariants).sort((a, b) => a[1] - b[1])) {
         variants.set(key, Number(value) || 0);
       }
     }

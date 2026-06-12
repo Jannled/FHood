@@ -18,8 +18,8 @@ export class Restaurant {
     const rawItems = d.menuItems;
     if (rawItems && typeof rawItems === "object") {
       const entries = Array.isArray(rawItems)
-        ? rawItems
-        : Object.entries(rawItems as Record<string, unknown>);
+        ? rawItems.sort((a, b) => a.menuNumber - b.menuNumber)
+        : Object.entries(rawItems as Record<string, unknown>).sort((a, b) => a[0].localeCompare(b[0]));
       for (const entry of entries) {
         if (Array.isArray(entry)) {
           const [, val] = entry as [unknown, unknown];
@@ -48,9 +48,11 @@ export class Restaurant {
       const variants = new Map<string, number>();
       item = new MenuItem(menuNumber, name, variants);
       this.menuItems.set(menuNumber, item);
+      this.menuItems = new Map(Array.from(this.menuItems).sort((a, b) => a[0] - b[0]));
     }
     item.name = name;
     item.variants.set(variant, price);
+    item.variants = new Map(Array.from(item.variants).sort((a, b) => a[1] - b[1]));
   }
 
   getItem(menuNumber: number): MenuItem | undefined {
